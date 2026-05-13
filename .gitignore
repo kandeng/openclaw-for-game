@@ -1,0 +1,46 @@
+# Dependencies
+node_modules/
+**/node_modules/
+.pnpm-store/
+
+# Build output (rebuild with pnpm build)
+dist/
+dist-runtime/
+
+# Game instance data (contains tokens/configs - do not commit)
+openclaw-game-home/
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# OS files
+.DS_Store
+**/.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs and temp files
+*.log
+*.tmp
+tmp/
+.cache/
+
+# Test artifacts (if running tests locally)
+coverage/
+__pycache__/
+*.pyc
+
+# pnpm
+pnpm-lock.yaml
+bun.lock
+bun.lockb
+
+# TypeScript build info
+*.tsbuildinfo
