@@ -44,3 +44,7 @@ bun.lockb
 
 # TypeScript build info
 *.tsbuildinfo
+
+# Build artifacts
+.artifacts/
+packages/

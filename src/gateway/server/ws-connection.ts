@@ -348,6 +348,9 @@ export function attachGatewayWsConnectionHandler(params: AttachGatewayWsConnecti
       normalizeLowercaseStringOrEmpty(userAgent).includes("swiftpm-testing-helper") &&
       isLoopbackAddress(remote);
 
+    const isNoisyControlUiReconnect = (remote: string | undefined, closeCode: number | undefined) =>
+      isLoopbackAddress(remote) && closeCode === 1008;
+
     socket.once("close", (code, reason) => {
       const durationMs = Date.now() - openedAt;
       const logForwardedFor = sanitizeLogValue(forwardedFor);
@@ -374,7 +377,8 @@ export function attachGatewayWsConnectionHandler(params: AttachGatewayWsConnecti
         ...closeMeta,
       };
       if (!client) {
-        const logFn = isNoisySwiftPmHelperClose(requestUserAgent, remoteAddr)
+        const logFn = isNoisySwiftPmHelperClose(requestUserAgent, remoteAddr) ||
+          isNoisyControlUiReconnect(remoteAddr, code)
           ? logWsControl.debug
           : logWsControl.warn;
         logFn(

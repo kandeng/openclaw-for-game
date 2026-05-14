@@ -792,6 +792,74 @@ function isSafeRelativePath(relPath: string) {
   return true;
 }
 
+async function handleGameAssetGet(
+  _req: IncomingMessage,
+  res: ServerResponse,
+  url: URL,
+): Promise<boolean> {
+  const file = url.searchParams.get("file");
+  if (!file || !isSafeRelativePath(file)) {
+    res.statusCode = 400;
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify({ ok: false, error: "invalid or missing file parameter" }));
+    return true;
+  }
+
+  const assetRoot = path.resolve(process.cwd(), "proposal");
+  const filePath = path.resolve(assetRoot, file);
+  if (!isWithinDir(assetRoot, filePath)) {
+    res.statusCode = 400;
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify({ ok: false, error: "path traversal rejected" }));
+    return true;
+  }
+
+  try {
+    const data = fs.readFileSync(filePath);
+    const ext = path.extname(filePath).toLowerCase();
+    res.statusCode = 200;
+    res.setHeader("Content-Type", contentTypeForExt(ext));
+    res.setHeader("Cache-Control", "no-cache");
+    res.end(data);
+  } catch {
+    res.statusCode = 404;
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify({ ok: false, error: "file not found" }));
+  }
+  return true;
+}
+
+function handleFetch3dgs(res: ServerResponse, url: URL): boolean {
+  const scene = url.searchParams.get("scene");
+  if (!scene || !/^[a-zA-Z0-9_-]+$/.test(scene)) {
+    res.statusCode = 400;
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify({ ok: false, error: "invalid or missing scene parameter" }));
+    return true;
+  }
+
+  const manifestPath = path.resolve(process.cwd(), "data/3dgs/metadata.json");
+  try {
+    const raw = fs.readFileSync(manifestPath, "utf-8");
+    const metadata = JSON.parse(raw) as { scenes?: Record<string, { assetUrl?: string; path?: string; title?: string; description?: string }> };
+    const entry = metadata.scenes?.[scene];
+    if (entry) {
+      res.statusCode = 200;
+      res.setHeader("Content-Type", "application/json");
+      res.end(JSON.stringify({ ok: true, type: "3dgs_resolved", sceneId: scene, ...entry, status: "success" }));
+    } else {
+      res.statusCode = 404;
+      res.setHeader("Content-Type", "application/json");
+      res.end(JSON.stringify({ ok: false, type: "3dgs_resolved", sceneId: scene, status: "not_found", error: `Scene '${scene}' not found in manifest.` }));
+    }
+  } catch {
+    res.statusCode = 500;
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify({ ok: false, error: "failed to read 3DGS manifest" }));
+  }
+  return true;
+}
+
 async function handleGameMessagePost(
   req: IncomingMessage,
   res: ServerResponse,
@@ -838,6 +906,18 @@ export async function handleControlUiHttpRequest(
   const gameMessagePath = basePath ? `${basePath}/api/game-message` : "/api/game-message";
   if (req.method === "POST" && pathname === gameMessagePath) {
     return handleGameMessagePost(req, res);
+  }
+
+  // Handle fetch-3dgs GET endpoint for resolving 3DGS scene metadata directly.
+  const fetch3dgsPath = basePath ? `${basePath}/api/fetch-3dgs` : "/api/fetch-3dgs";
+  if (req.method === "GET" && pathname === fetch3dgsPath) {
+    return handleFetch3dgs(res, url);
+  }
+
+  // Handle game-asset GET endpoint for serving game asset files.
+  const gameAssetPath = basePath ? `${basePath}/api/game-asset` : "/api/game-asset";
+  if (req.method === "GET" && pathname === gameAssetPath) {
+    return handleGameAssetGet(req, res, url);
   }
 
   const route = classifyControlUiRequest({

@@ -1,0 +1,22 @@
+{
+  "scenes": {
+    "architecture": {
+      "assetUrl": "/game_control/api/game-asset?file=openclaw_for_game_architecture.png",
+      "path": "data/3dgs/architecture.splat",
+      "title": "Architecture Overview",
+      "description": "3D Gaussian Splatting scene of the OpenClaw game architecture"
+    },
+    "lobby": {
+      "assetUrl": "/game_control/api/game-asset?file=lobby.splat",
+      "path": "data/3dgs/lobby.splat",
+      "title": "Game Lobby",
+      "description": "Main lobby environment"
+    },
+    "arena": {
+      "assetUrl": "/game_control/api/game-asset?file=arena.splat",
+      "path": "data/3dgs/arena.splat",
+      "title": "Battle Arena",
+      "description": "Competitive arena environment"
+    }
+  }
+}

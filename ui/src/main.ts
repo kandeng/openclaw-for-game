@@ -5,6 +5,13 @@ import { customElement, state } from "lit/decorators.js";
 class GameControlApp extends LitElement {
   @state() private _feedback = "";
   @state() private _inputValue = "";
+  @state() private _wsStatus = "disconnected";
+  @state() private _imageUrl = "";
+  @state() private _hookResponse = "";
+
+  private _ws: WebSocket | null = null;
+  private _rpcId = 0;
+  private _pendingRpc = new Map<string, (data: unknown) => void>();
 
   static override styles = css`
     :host {
@@ -180,7 +187,234 @@ class GameControlApp extends LitElement {
       margin: 0 auto;
       line-height: 1.7;
     }
+
+    .fetch-box {
+      background: #151b23;
+      border: 1px solid rgba(99, 179, 237, 0.15);
+      border-radius: 12px;
+      padding: 24px;
+      margin-bottom: 24px;
+    }
+
+    .fetch-box h2 {
+      margin: 0 0 16px;
+      font-size: 1rem;
+      font-weight: 600;
+      color: #90cdf4;
+    }
+
+    .fetch-btn {
+      padding: 12px 24px;
+      border-radius: 8px;
+      border: none;
+      background: #ed8936;
+      color: #0a0e14;
+      font-family: inherit;
+      font-size: 0.9rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    .fetch-btn:hover {
+      background: #f6ad55;
+    }
+
+    .fetch-btn:active {
+      background: #dd6b20;
+    }
+
+    .fetch-btn:disabled {
+      background: #4a5568;
+      cursor: not-allowed;
+    }
+
+    .ws-status {
+      display: inline-block;
+      padding: 4px 10px;
+      border-radius: 12px;
+      font-size: 0.75rem;
+      margin-left: 12px;
+    }
+
+    .ws-status.connected {
+      background: rgba(72, 187, 120, 0.15);
+      color: #48bb78;
+    }
+
+    .ws-status.disconnected {
+      background: rgba(252, 129, 129, 0.15);
+      color: #fc8181;
+    }
+
+    .ws-status.connecting {
+      background: rgba(237, 137, 54, 0.15);
+      color: #ed8936;
+    }
+
+    .hook-response {
+      margin-top: 12px;
+      padding: 12px;
+      background: #0a0e14;
+      border-radius: 8px;
+      font-size: 0.8rem;
+      color: #a0aec0;
+      white-space: pre-wrap;
+      word-break: break-all;
+      max-height: 120px;
+      overflow-y: auto;
+    }
+
+    .image-container {
+      margin-top: 16px;
+      text-align: center;
+    }
+
+    .image-container img {
+      max-width: 100%;
+      max-height: 500px;
+      border-radius: 8px;
+      border: 1px solid rgba(99, 179, 237, 0.2);
+    }
   `;
+
+  override connectedCallback() {
+    super.connectedCallback();
+    this._connectWebSocket();
+  }
+
+  override disconnectedCallback() {
+    super.disconnectedCallback();
+    if (this._ws) {
+      this._ws.close();
+      this._ws = null;
+    }
+  }
+
+  private _connectWebSocket() {
+    this._wsStatus = "connecting";
+    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+    const wsUrl = `${protocol}//${window.location.host}/ws`;
+    const ws = new WebSocket(wsUrl);
+
+    ws.onmessage = (ev) => {
+      try {
+        const data = JSON.parse(ev.data as string);
+        // Handle connect.challenge: gateway sends this before accepting connect
+        if (data.type === "event" && data.event === "connect.challenge") {
+          const nonce = data.payload?.nonce;
+          if (nonce) {
+            // Send connect handshake after receiving challenge
+            const handshake = {
+              type: "req",
+              method: "connect",
+              id: this._nextRpcId(),
+              params: {
+                minProtocol: 3,
+                maxProtocol: 4,
+                client: {
+                  id: "openclaw-control-ui",
+                  version: "1.0.0",
+                  platform: "web",
+                  mode: "ui",
+                },
+                auth: { token: "game-control-2026" },
+                scopes: ["operator.write"],
+              },
+            };
+            ws.send(JSON.stringify(handshake));
+          }
+          return;
+        }
+        if (data.type === "res") {
+          // Check if this is the connect handshake response
+          if (data.ok && this._wsStatus === "connecting") {
+            this._wsStatus = "connected";
+          }
+          // Resolve pending RPC
+          const resolver = this._pendingRpc.get(data.id);
+          if (resolver) {
+            this._pendingRpc.delete(data.id);
+            resolver(data);
+          }
+        } else if (data.type === "push") {
+          // Handle push messages from hooks
+          this._handlePushMessage(data);
+        }
+      } catch {
+        // ignore parse errors
+      }
+    };
+
+    ws.onclose = () => {
+      this._wsStatus = "disconnected";
+      this._ws = null;
+      // Reconnect after delay
+      setTimeout(() => this._connectWebSocket(), 3000);
+    };
+
+    ws.onerror = () => {
+      this._wsStatus = "disconnected";
+    };
+
+    this._ws = ws;
+  }
+
+  private _nextRpcId(): string {
+    return `rpc-${++this._rpcId}-${Date.now()}`;
+  }
+
+  private _sendRpc(method: string, params: Record<string, unknown>): Promise<unknown> {
+    return new Promise((resolve, reject) => {
+      if (!this._ws || this._ws.readyState !== WebSocket.OPEN) {
+        reject(new Error("WebSocket not connected"));
+        return;
+      }
+      const id = this._nextRpcId();
+      const frame = { type: "req", method, id, params };
+      this._pendingRpc.set(id, resolve as (data: unknown) => void);
+      this._ws.send(JSON.stringify(frame));
+      // Timeout after 30s
+      setTimeout(() => {
+        if (this._pendingRpc.has(id)) {
+          this._pendingRpc.delete(id);
+          reject(new Error("RPC timeout"));
+        }
+      }, 30000);
+    });
+  }
+
+  private _handlePushMessage(data: { event?: string; payload?: unknown }) {
+    // Hook responses may arrive as push messages
+    if (data.payload) {
+      this._hookResponse = JSON.stringify(data.payload, null, 2);
+    }
+  }
+
+  private async _handleFetch3DGS() {
+    this._hookResponse = "Fetching 3DGS scene: architecture...";
+    this._imageUrl = "";
+
+    try {
+      const res = await fetch("./api/fetch-3dgs?scene=architecture");
+      const data = await res.json() as { ok: boolean; status?: string; sceneId?: string; assetUrl?: string; path?: string; title?: string; error?: string };
+
+      if (data.ok && data.status === "success") {
+        this._hookResponse = JSON.stringify(data, null, 2);
+        if (data.assetUrl) {
+          this._imageUrl = data.assetUrl;
+        }
+      } else {
+        this._hookResponse = `Error: ${data.error || "scene not found"}`;
+        // Fallback: try the asset endpoint directly
+        this._imageUrl = "./api/game-asset?file=openclaw_for_game_architecture.png";
+      }
+    } catch (err) {
+      this._hookResponse = `Error: ${err instanceof Error ? err.message : String(err)}`;
+      // Fallback: try the asset endpoint directly
+      this._imageUrl = "./api/game-asset?file=openclaw_for_game_architecture.png";
+    }
+  }
 
   private async _handleSend() {
     const text = this._inputValue.trim();
@@ -222,6 +456,9 @@ class GameControlApp extends LitElement {
             <span class="status-dot"></span>
             Gateway Connected
           </div>
+          <span class="ws-status ${this._wsStatus}">
+            WS: ${this._wsStatus}
+          </span>
         </header>
 
         <div class="hello-world">
@@ -231,6 +468,26 @@ class GameControlApp extends LitElement {
             for managing players, missions, and storyline events through the
             OpenClaw Gateway.
           </p>
+        </div>
+
+        <div class="fetch-box">
+          <h2>3DGS Asset Hook Test</h2>
+          <button
+            class="fetch-btn"
+            @click=${this._handleFetch3DGS}
+          >
+            Fetch 3DGS Scene
+          </button>
+          ${this._hookResponse
+            ? html`<div class="hook-response">${this._hookResponse}</div>`
+            : ""}
+          ${this._imageUrl
+            ? html`
+                <div class="image-container">
+                  <img src=${this._imageUrl} alt="3DGS Scene Asset" />
+                </div>
+              `
+            : ""}
         </div>
 
         <div class="message-box">
