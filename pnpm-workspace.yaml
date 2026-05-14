@@ -1,6 +1,6 @@
 packages:
   - .
-  - ui
+  - packages/game-control
 
 # minimumReleaseAge disabled for game engine fork
 # minimumReleaseAge: 2880

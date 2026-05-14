@@ -47,4 +47,5 @@ bun.lockb
 
 # Build artifacts
 .artifacts/
-packages/
+packages/memory-host-sdk/
+packages/plugin-sdk/
