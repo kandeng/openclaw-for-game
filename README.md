@@ -75,20 +75,20 @@ The HUD fields are customizable — adapt them to display any telemetry relevant
 
 ```mermaid
 graph TB
-    subgraph P1["Process 1 - Reverse Proxy :2026"]
-        Proxy["Reverse Proxy (proxy.mjs)"]
-        SP["game-player - React static files"]
-        SD["game-director - React static files"]
+    subgraph P1[Process 1 - Reverse Proxy port 2026]
+        Proxy[Reverse Proxy proxy.mjs]
+        SP[game-player React static files]
+        SD[game-director React static files]
         Proxy --> SP
         Proxy --> SD
     end
 
-    subgraph P2["Process 2 - OpenClaw Gateway :2027"]
-        GW["webchat + WebSocket + API"]
+    subgraph P2[Process 2 - OpenClaw Gateway port 2027]
+        GW[webchat and WebSocket and API]
     end
 
-    Client((Browser)) -->|"port 2026"| Proxy
-    Proxy -->|"forward other requests"| GW
+    Client((Browser)) -->|port 2026| Proxy
+    Proxy -->|forward other requests| GW
 ```
 
 > These URLs are for **production mode** only. In standalone mode, each package runs on its own dev server port.
@@ -115,16 +115,11 @@ In production mode, the reverse proxy on port 2026 provides a single entry point
 
 ```mermaid
 graph LR
-    A[Player Alice] --> G[OpenClaw Gateway]
-    G --> A
-    B[Player Bob] --> G
-    G --> B
-    C[Human Director] --> G
-    G --> C
-    G --> D[AI Agent Director]
-    D --> E[Remote AI Qwen Model]
-    E --> D
-    D --> G
+    A[Player Alice] <--> G[OpenClaw Gateway]
+    B[Player Bob] <--> G
+    C[Human Director] <--> G
+    G <--> D[AI Agent Director]
+    D <--> E[Remote AI Qwen Model]
 ```
 
 ## Prerequisites
