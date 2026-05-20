@@ -1,5 +1,9 @@
 # openclaw-for-game
 
+<p align="center">
+  <img src="proposal/openclaw-for-game-architecture.png" width="96%" />
+</p>
+
 A mobile-first Progressive Web App that combines a 3D control interface with real-time Matrix chat. Provides touch joystick controls, a resizable chat panel powered by a live Matrix homeserver, a telemetry HUD, and an extensible toolbox.
 
 The included demo uses a Crazyflie drone model to illustrate the control capabilities. In production, the 3D viewport is replaced with your own VR/AR scene.
