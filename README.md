@@ -12,8 +12,8 @@ The included demo uses a Crazyflie drone model to illustrate the control capabil
 </p>
 
 <p align="center">
-  <img src="game-player/doc/images/crazyflie_pwa_chatbox.png" width="24%" />
-  <img src="game-player/doc/images/crazyflie_pwa_toolbox.png" width="24%" />
+  <img src="game-player/doc/images/crazyflie_pwa_chatbox.png" width="48%" />
+  <img src="game-player/doc/images/crazyflie_pwa_toolbox.png" width="48%" />
 </p>
 
 ## Features
