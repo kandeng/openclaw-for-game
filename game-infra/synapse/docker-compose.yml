@@ -1,0 +1,21 @@
+services:
+  synapse:
+    image: matrixdotorg/synapse:latest
+    container_name: game-player-synapse
+    restart: unless-stopped
+    environment:
+      SYNAPSE_SERVER_NAME: ${SYNAPSE_SERVER_NAME:-matrix.openclaw.local}
+      SYNAPSE_REPORT_STATS: "no"
+    volumes:
+      - ./data:/data
+    ports:
+      - "8008:8008"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - game-player-net
+
+networks:
+  game-player-net:
+    name: game-player-net
+    driver: bridge

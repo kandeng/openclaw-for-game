@@ -1,0 +1,12 @@
+services:
+  conduit:
+    image: docker.io/matrixconduit/matrix-conduit:latest
+    container_name: conduit
+    restart: unless-stopped
+    ports:
+      - "8008:8008"
+    volumes:
+      - ./data:/var/lib/matrix-conduit
+      - ./conduit.toml:/etc/matrix-conduit/conduit.toml:ro
+    environment:
+      CONDUIT_CONFIG: /etc/matrix-conduit/conduit.toml

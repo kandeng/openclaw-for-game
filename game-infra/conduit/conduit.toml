@@ -1,0 +1,11 @@
+[global]
+server_name = "matrix.openclaw.local"
+port = 8008
+database_path = "/var/lib/matrix-conduit/"
+max_request_size = 20000000
+allow_registration = true
+allow_federation = false
+
+# Enable the admin API (useful for management)
+[admin]
+enabled = true

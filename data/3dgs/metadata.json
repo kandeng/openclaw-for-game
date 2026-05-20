@@ -1,7 +1,7 @@
 {
   "scenes": {
     "architecture": {
-      "assetUrl": "/game_control/api/game-asset?file=openclaw_for_game_architecture.png",
+      "assetUrl": "/game_control/api/game-asset?file=openclaw-for-game-architecture.png",
       "path": "data/3dgs/architecture.splat",
       "title": "Architecture Overview",
       "description": "3D Gaussian Splatting scene of the OpenClaw game architecture"

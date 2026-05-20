@@ -1,0 +1,8 @@
+{
+  "name": "game-openclaw",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "http-proxy": "^1.18.1"
+  }
+}

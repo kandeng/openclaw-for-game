@@ -1,487 +1,309 @@
-# OpenClaw for Game
+# openclaw-for-game
 
-A game control system that provides a **Game Control Big Screen** web interface for game directors to manage live game sessions, communicate with players, and monitor game state in real-time.
+A mobile-first Progressive Web App that combines a 3D control interface with real-time Matrix chat. Provides touch joystick controls, a resizable chat panel powered by a live Matrix homeserver, a telemetry HUD, and an extensible toolbox.
 
-Built on OpenClaw — an open-source multi-channel AI gateway.
+The included demo uses a Crazyflie drone model to illustrate the control capabilities. In production, the 3D viewport is replaced with your own VR/AR scene.
+
+<p align="center">
+  <img src="game-player/doc/images/crazyflie_pwa_motion.png" width="24%" />
+  <img src="game-player/doc/images/crazyflie_pwa_rotation.png" width="24%" />
+  <img src="game-player/doc/images/crazyflie_pwa_updown.png" width="24%" />
+  <img src="game-player/doc/images/crazyflie_pwa_lens.png" width="24%" />
+</p>
+
+<p align="center">
+  <img src="game-player/doc/images/crazyflie_pwa_chatbox.png" width="24%" />
+  <img src="game-player/doc/images/crazyflie_pwa_toolbox.png" width="24%" />
+</p>
 
 ## Features
 
-- **Game Control Dashboard** — Web-based big screen UI for game directors
-- **Real-time Messaging** — Send messages to server log from the dashboard
-- **Player Communication** — Matrix protocol integration for player messaging
-- **AI Agent Runtime** — Built-in AI agent for game logic and automation
-- **Fully Isolated** — Runs independently without conflicting with other OpenClaw instances
+- **Pluggable 3D Viewport** — Swap in any Three.js scene, AR camera feed, or VR environment
+- **4-Mode Joystick** — Touch-based joystick with Move, Rotate, Height, and Lens (focal length) modes
+- **Telemetry HUD** — Live overlay displaying position, orientation, and camera parameters
+- **Matrix Chat Panel** — Resizable chat panel backed by a real Matrix homeserver; send and receive messages in real time
+- **Extensible Toolbox** — Grid of quick-action buttons, customizable per game
+- **PWA Support** — Installable as a native-like app on mobile devices
+- **iOS Optimized** — Full safe-area support for iPhone notch and browser toolbar
 
-## System Requirements
+## How to Use
 
-| Component | Requirement |
-|-----------|-------------|
-| OS | Linux (Ubuntu 20.04+), macOS 12+, Windows 10+ (WSL2) |
-| Node.js | >= 22.0 |
-| pnpm | >= 9.0 |
-| RAM | >= 2GB |
-| Disk | >= 500MB (including dependencies) |
-| Network | LAN access (for game control UI) |
+### Joystick Control
+
+The joystick is a semi-transparent circular overlay in the center of the viewport. It generates velocity commands that your game logic can map to any controllable entity (drone, robot, character, camera, etc.).
+
+| Mode | Label | Action | Directions |
+|------|-------|--------|------------|
+| **Move** | M | Horizontal translation | Up / Down / Left / Right |
+| **Rotate** | R | Yaw rotation | Clockwise / Counter-clockwise |
+| **Height** | H | Vertical translation | Up / Down |
+| **Lens** | L | Camera focal length (zoom) | Left (zoom out) / Right (zoom in) |
+
+- **Toggle mode**: Tap the inner circle to cycle through modes: M → R → H → L → M
+- **Control**: Touch the outer ring area and drag in the desired direction
+- **Stop**: Release your finger to stop immediately
+
+### Chat Panel
+
+- **Swipe up** on the drag handle (gray pill at top of panel) to expand the chat area
+- **Swipe down** to collapse it
+- The panel snaps to three heights: collapsed (15vh), default (30vh), expanded (50vh)
+- **Send** button posts a message to the selected Matrix room
+- Messages appear in a scrollable list with sender names and timestamps
+- Tap the **+** (plus circle) button to open the toolbox with quick-action buttons (Camera, Identify, Game, Settings)
+
+### Telemetry HUD
+
+The heads-up display at the bottom of the viewport shows real-time state of the controlled entity:
+- Position: `x`, `y`, `z`
+- Orientation: `yaw` (degrees)
+- Camera: `focal` length value
+
+The HUD fields are customizable — adapt them to display any telemetry relevant to your game (speed, health, battery, signal strength, etc.).
+
+## Architecture
+
+| Package | Description | Production URL |
+|---------|-------------|----------------|
+| `game-infra/synapse/` | Matrix homeserver (Synapse, Docker) | `http://localhost:8008` |
+| `game-infra/conduit/` | Matrix homeserver (Conduit, alternative) | `http://localhost:8008` |
+| `game-openclaw/` | OpenClaw gateway + AI Director agent | `http://localhost:2026/webchat` |
+| `game-player/` | Player web UI (React PWA) | `http://localhost:2026/game-player/` |
+| `game-director/` | Director web UI (React PWA) | `http://localhost:2026/game-director/` |
+
+### Production Architecture Diagram
+
+```mermaid
+graph TB
+    subgraph P1["Process 1 - Reverse Proxy :2026"]
+        Proxy["Reverse Proxy (proxy.mjs)"]
+        SP["game-player - React static files"]
+        SD["game-director - React static files"]
+        Proxy --> SP
+        Proxy --> SD
+    end
+
+    subgraph P2["Process 2 - OpenClaw Gateway :2027"]
+        GW["webchat + WebSocket + API"]
+    end
+
+    Client((Browser)) -->|"port 2026"| Proxy
+    Proxy -->|"forward other requests"| GW
+```
+
+> These URLs are for **production mode** only. In standalone mode, each package runs on its own dev server port.
+
+## Production Mode vs. Standalone Mode
+
+Each package can run independently in **standalone mode** for development and testing — no other packages required. **Production mode** integrates all four packages into a single unified system: an FPV game engine powered by an OpenClaw AI agent.
+
+| | Standalone Mode | Production Mode |
+|--|-----------------|-----------------|
+| **Purpose** | Develop and test a single package | Run the complete integrated system |
+| **game-player** | `pnpm dev` on port 5173 | Served from `/game-player/` on port 2026 → `http://localhost:2026/game-player/` |
+| **game-director** | `pnpm dev` on port 5174 | Served from `/game-director/` on port 2026 → `http://localhost:2026/game-director/` |
+| **game-openclaw** | `./start.sh` — gateway on port 2027 | `./start-prod.sh` — gateway on port 2027 + proxy on port 2026 |
+| **game-infra** | Optional — chat features need a homeserver | Required — Synapse or Conduit must be running |
+| **How it works** | Each app runs its own dev server | A reverse proxy (`proxy.mjs`) on port 2026 serves built static files for game-player and game-director, and forwards all other requests (including WebSocket) to the OpenClaw gateway |
+
+In production mode, the reverse proxy on port 2026 provides a single entry point:
+- `/game-player/` → built game-player static files
+- `/game-director/` → built game-director static files
+- Everything else (including `/webchat` and WebSocket) → OpenClaw gateway on port 2027
+
+### Dataflow Diagram
+
+```mermaid
+graph LR
+    A[Player Alice] --> G[OpenClaw Gateway]
+    G --> A
+    B[Player Bob] --> G
+    G --> B
+    C[Human Director] --> G
+    G --> C
+    G --> D[AI Agent Director]
+    D --> E[Remote AI Qwen Model]
+    E --> D
+    D --> G
+```
+
+## Prerequisites
+
+- Node.js 22+
+- pnpm (`npm install -g pnpm`)
+- Docker & Docker Compose
 
 ## Installation
 
-### Step 1: Install Node.js 22
+### Standalone Mode
 
-#### Ubuntu/Debian
-
-```bash
-curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
-sudo apt-get install -y nodejs
-
-# Verify installation
-node --version   # Should show v22.x.x
-npm --version    # Should show 10.x.x
-```
-
-#### macOS (Homebrew)
-
-```bash
-brew install node@22
-
-# Verify installation
-node --version
-```
-
-#### Windows (WSL2)
-
-Install WSL2 first, then follow Ubuntu instructions inside WSL.
-
-### Step 2: Install pnpm
-
-```bash
-npm install -g pnpm
-
-# Verify installation
-pnpm --version   # Should show 9.x.x or higher
-```
-
-### Step 3: Clone the Repository
-
-```bash
-git clone https://github.com/kandeng/openclaw_unity_game.git
-cd openclaw_unity_game
-```
-
-### Step 4: Install Dependencies
-
-```bash
+```sh
 pnpm install
 ```
 
-This downloads and installs all required packages. Takes 1-3 minutes depending on network speed.
+This installs dependencies for all packages (game-player, game-director, game-openclaw) via a pnpm workspace. Shared dependencies are deduplicated automatically.
 
-### Step 5: Build the Project
+**Access URLs:**
+| URL | Description |
+|-----|-------------|
+| `http://localhost:5173` | Game Player dev server |
+| `http://localhost:5174` | Game Director dev server |
+| `http://localhost:2027/webchat` | OpenClaw gateway |
 
-```bash
-# Build the gateway core
-pnpm build
+### Production Mode
 
-# Build the Game Control UI
-cd ui
-npx vite build
+```sh
+pnpm install
+```
+
+Build the web apps:
+```sh
+pnpm build:player:prod
+pnpm build:director:prod
+```
+
+Setup game-openclaw:
+```sh
+cd game-openclaw
+./install.sh
 cd ..
 ```
 
-Build output goes to `dist/` and `dist/control-ui/` directories.
+You will need:
+- A **Qwen API key** from https://dashscope.console.aliyun.com/apiKey
+- A **Matrix access token** for `@ai_director` — obtain with:
+  ```sh
+  curl -s -X POST http://localhost:8008/_matrix/client/r0/login \
+    -H "Content-Type: application/json" \
+    -d '{"type":"m.login.password","user":"ai_director","password":"ai_director_pass"}' | jq -r .access_token
+  ```
 
-## Configuration
-
-### Create Game Config Directory
-
-```bash
-mkdir -p openclaw-game-home/.openclaw
+Or provide non-interactively:
+```sh
+cd game-openclaw && QWEN_API_KEY=sk-xxx MATRIX_ACCESS_TOKEN=syt_xxx ./install.sh && cd ..
 ```
 
-### Create Configuration File
+**Access URLs:**
+| URL | Description |
+|-----|-------------|
+| `http://localhost:2026/game-player/` | Game Player web UI |
+| `http://localhost:2026/game-director/` | Game Director web UI |
+| `http://localhost:2026/webchat` | OpenClaw webchat |
 
-Create `openclaw-game-home/.openclaw/openclaw.json`:
+## Integrated Test
 
-```json
-{
-  "gateway": {
-    "mode": "local",
-    "port": 18790,
-    "bind": "lan",
-    "controlUi": {
-      "basePath": "/game_control",
-      "dangerouslyDisableDeviceAuth": true,
-      "allowInsecureAuth": true
-    },
-    "auth": {
-      "mode": "token",
-      "token": "game-control-2026"
-    }
-  }
-}
+### Step 1: Cleanup before start
+
+Before running the integrated test, make sure no standalone dev servers or gateways are running, and stop any running Matrix homeservers:
+
+```sh
+# Kill any running dev servers
+pkill -f "vite" 2>/dev/null
+
+# Stop any running gateway
+cd game-openclaw && ./stop.sh 2>/dev/null; ./stop-prod.sh 2>/dev/null; cd ..
+
+# Stop any running homeserver (Synapse)
+cd game-infra/synapse && docker compose down 2>/dev/null; cd ../..
+
+# Stop any running homeserver (Conduit)
+cd game-infra/conduit && docker compose down 2>/dev/null; cd ../..
 ```
 
-### Configuration Options Explained
+### Step 2: Start the Homeserver
 
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `gateway.mode` | string | Yes | Set to `"local"` for standalone mode |
-| `gateway.port` | number | Yes | HTTP port number (default: 18790) |
-| `gateway.bind` | string | Yes | `"lan"` = all interfaces, `"loopback"` = localhost only |
-| `controlUi.basePath` | string | Yes | URL path for the web UI (default: `/game_control`) |
-| `controlUi.dangerouslyDisableDeviceAuth` | boolean | Yes | Skip browser device pairing (convenience for game screens) |
-| `controlUi.allowInsecureAuth` | boolean | Yes | Allow HTTP without TLS (local network only) |
-| `auth.mode` | string | Yes | `"token"` or `"password"` |
-| `auth.token` | string | If mode=token | Shared secret for authentication |
+Choose Synapse or Conduit (not both — they share port 8008):
 
-## Starting the Gateway
-
-### Basic Start
-
-```bash
-OPENCLAW_HOME=./openclaw-game-home node openclaw.mjs gateway run --port 18790 --bind lan --force
+**Synapse:**
+```sh
+cd game-infra/synapse
+docker compose up -d
+cd ../..
 ```
 
-### Start with Verbose Logging
-
-```bash
-OPENCLAW_HOME=./openclaw-game-home node openclaw.mjs gateway run --port 18790 --bind lan --force --verbose
+**Conduit:**
+```sh
+cd game-infra/conduit
+docker compose up -d
+cd ../..
 ```
 
-### Expected Output
-
-```
-🦞 OpenClaw 2026.5.12-beta.1
-   Gateway online—please keep hands, feet, and appendages inside the shell at all times.
-
-23:43:09 [gateway] loading configuration…
-23:43:09 [gateway] force: no listeners on port 18790
-23:43:09 [gateway] resolving authentication…
-23:43:09 [gateway] starting...
-23:43:10 [gateway] starting HTTP server...
-23:43:10 [health-monitor] started
-23:43:10 [plugins] loaded 1 plugin(s)
-23:43:10 [gateway] agent model: openai/gpt-5.5
-23:43:10 [gateway] http server listening
-23:43:10 [gateway] ready
-23:43:10 [heartbeat] started
+Verify:
+```sh
+curl -s http://localhost:8008/_matrix/client/versions
 ```
 
-The gateway is now running and ready.
+### Step 3: Register Users
 
-### Stop the Gateway
-
-Press `Ctrl+C` in the terminal where the gateway is running.
-
-Or force kill from another terminal:
-
-```bash
-pkill -9 -f "openclaw.mjs gateway"
+**Synapse:**
+```sh
+docker exec game-player-synapse register_new_matrix_user -c /data/homeserver.yaml --no-admin -u alice -p 'alice_pass' http://localhost:8008
+docker exec game-player-synapse register_new_matrix_user -c /data/homeserver.yaml --no-admin -u bob -p 'bob_pass' http://localhost:8008
+docker exec game-player-synapse register_new_matrix_user -c /data/homeserver.yaml --no-admin -u ai_director -p 'ai_director_pass' http://localhost:8008
+docker exec game-player-synapse register_new_matrix_user -c /data/homeserver.yaml --no-admin -u human_director -p 'human_director_pass' http://localhost:8008
 ```
 
-## Usage
-
-### Access the Game Control Dashboard
-
-Open your web browser and navigate to:
-
-```
-http://<server-ip>:18790/game_control/
-```
-
-Examples:
-- Local machine: `http://localhost:18790/game_control/`
-- LAN access: `http://192.168.1.100:18790/game_control/`
-
-### Game Control Dashboard Features
-
-The dashboard provides the following panels:
-
-#### 1. Status Indicator
-- Shows gateway connection state
-- Green = connected, Red = disconnected
-- Located in the top-right corner
-
-#### 2. Message Inbox
-Send messages from the dashboard to the server console log.
-
-**How to use:**
-1. Type your message in the "Send Message to Server" text input
-2. Click the **Send** button, or press **Enter**
-3. Message appears in the gateway terminal with `[game-control]` prefix
-
-**Example:**
-- You type: `Game starting in 5 minutes`
-- Server log shows: `[game-control] message from UI: Game starting in 5 minutes`
-
-#### 3. Player Chat (Placeholder)
-- Future feature for real-time player messaging
-- Will integrate with Matrix protocol
-
-#### 4. Mission Control (Placeholder)
-- Future feature for managing game missions
-- Create, assign, and track mission progress
-
-#### 5. Storyline Events (Placeholder)
-- Future feature for triggering storyline events
-- Schedule and broadcast event notifications
-
-#### 6. Game State (Placeholder)
-- Future feature for displaying current game state
-- Show player scores, progress, and game variables
-
-### API Endpoints
-
-#### Send Message (POST)
-
-```bash
-curl -X POST http://127.0.0.1:18790/game_control/api/game-message \
-  -H "Content-Type: application/json" \
-  -d '{"message": "Your message here"}'
+**Conduit:**
+```sh
+cd game-infra/conduit
+./register-user.sh alice alice_pass
+./register-user.sh bob bob_pass
+./register-user.sh ai_director ai_director_pass
+./register-user.sh human_director human_director_pass
+cd ../..
 ```
 
-**Response:**
-```json
-{"ok": true}
+### Step 4: Start game-openclaw
+
+**Production mode** (gateway + web UIs, port 2026):
+```sh
+cd game-openclaw && ./start-prod.sh &
+cd ..
 ```
 
-**Server Log:**
-```
-[game-control] message from UI: Your message here
-```
+### Step 5: Test game-player
 
-### Authentication
+**Production mode:**
+Open http://localhost:2026/game-player/, sign in as `alice` / `alice_pass`.
 
-When accessing the gateway, you need to provide the authentication token.
+Open a second browser (incognito), sign in as `bob` / `bob_pass`. Both join the `#alice-bob` room automatically.
 
-#### Via URL Parameter
+### Step 6: Test game-director
 
-```
-http://localhost:18790/game_control/?token=game-control-2026
-```
+**Production mode:**
+Open http://localhost:2026/game-director/, sign in as `human_director` / `human_director_pass`.
 
-#### Via WebSocket
+### Step 7: Verify the AI Director
 
-The UI automatically handles authentication using the token from the URL or localStorage.
+1. All 4 users (alice, bob, ai_director, human_director) should be in the `#alice-bob:matrix.openclaw.local` room.
+2. Type a message as alice, bob, or human_director.
+3. The `ai_director` agent should reply with a short joke related to the message.
 
-## Development
+### Step 8: Cleanup after completed
 
-### UI Development with Hot Reload
+```sh
+# Stop game-openclaw
+cd game-openclaw && ./stop-prod.sh && cd ..
 
-```bash
-cd ui
-npx vite
-```
-
-The Vite dev server starts at `http://localhost:5173` with:
-- Hot module replacement (instant updates)
-- Automatic proxy to gateway API
-- Source maps for debugging
-
-Open `http://localhost:5173` in your browser. Changes to `ui/src/main.ts` update instantly.
-
-### Gateway Development
-
-Restart the gateway after code changes:
-
-```bash
-# Stop existing gateway (Ctrl+C or kill)
-pkill -9 -f "openclaw.mjs gateway"
-
-# Rebuild
-pnpm build
-cd ui && npx vite build && cd ..
-
-# Restart
-OPENCLAW_HOME=./openclaw-game-home node openclaw.mjs gateway run --port 18790 --bind lan --force --verbose
+# Stop the homeserver
+cd game-infra/synapse && docker compose down && cd ../..
 ```
 
-### Project Structure
+## User Accounts
 
-```
-openclaw_unity_game/
-│
-├── openclaw-game-home/          # Game instance data (not in git)
-│   └── .openclaw/
-│       └── openclaw.json        # Your configuration
-│
-├── ui/                          # Game Control UI source
-│   ├── src/
-│   │   └── main.ts              # Main Lit web component
-│   ├── index.html               # HTML entry point
-│   ├── vite.config.ts           # Vite build configuration
-│   └── package.json             # UI dependencies
-│
-├── src/                         # Gateway core source
-│   ├── gateway/                 # HTTP server, WebSocket, routing
-│   ├── config/                  # Configuration parsing
-│   ├── cli/                     # Command-line interface
-│   └── agents/                  # AI agent runtime
-│
-├── dist/                        # Built gateway output
-│   └── control-ui/              # Built UI assets
-│
-├── dist-runtime/                # Runtime extension files
-├── docs/
-│   └── reference/
-│       └── templates/           # Workspace templates (required)
-├── scripts/                     # Build and utility scripts
-├── config/                      # TypeScript/lint configurations
-├── proposal/                    # Design documentation
-│   └── WIKI.md                  # System architecture wiki
-│
-├── openclaw.mjs                 # CLI entry point
-├── package.json                 # Project dependencies
-├── pnpm-lock.yaml               # Locked dependency versions
-└── README.md                    # This file
-```
+| User | Matrix ID | Password | Role |
+|------|-----------|----------|------|
+| Alice | `@alice:matrix.openclaw.local` | `alice_pass` | Player |
+| Bob | `@bob:matrix.openclaw.local` | `bob_pass` | Player |
+| AI Director | `@ai_director:matrix.openclaw.local` | `ai_director_pass` | AI Agent Director |
+| Human Director | `@human_director:matrix.openclaw.local` | `human_director_pass` | Human Director |
+| Admin | `@admin:matrix.openclaw.local` | `admin_pass` | Server Admin |
 
-## Environment Variables
+## Package Details
 
-| Variable | Purpose | Example | Required |
-|----------|---------|---------|----------|
-| `OPENCLAW_HOME` | Game instance directory | `./openclaw-game-home` | Yes |
-| `OPENCLAW_GATEWAY_PORT` | Override config port | `18790` | No |
-| `OPENAI_API_KEY` | OpenAI API key (for AI features) | `sk-...` | Optional |
+- **game-infra/synapse/** — [README](game-infra/synapse/README.md)
+- **game-infra/conduit/** — [README](game-infra/conduit/README.md)
+- **game-openclaw/** — [README](game-openclaw/README.md)
+- **game-player/** — [README](game-player/README.md)
+- **game-director/** — [README](game-director/README.md)
 
-## CLI Reference
-
-### Gateway Commands
-
-```bash
-node openclaw.mjs gateway run [options]
-```
-
-**Options:**
-
-| Option | Description | Default |
-|--------|-------------|---------|
-| `--port <number>` | HTTP port | From config or 18789 |
-| `--bind <mode>` | Network binding: `loopback` or `lan` | From config |
-| `--force` | Kill existing process on port | false |
-| `--verbose` | Enable detailed logging | false |
-
-### Examples
-
-**Start on custom port:**
-```bash
-OPENCLAW_HOME=./openclaw-game-home node openclaw.mjs gateway run --port 9000 --bind loopback
-```
-
-**Start with force mode:**
-```bash
-OPENCLAW_HOME=./openclaw-game-home node openclaw.mjs gateway run --port 18790 --bind lan --force
-```
-
-## Security
-
-### Local Network Only
-
-The default configuration is designed for **local game LAN** use:
-
-- `allowInsecureAuth: true` — Allows HTTP without HTTPS
-- `dangerouslyDisableDeviceAuth: true` — Skips browser pairing
-
-**DO NOT expose this to the public internet with these settings.**
-
-### Public Deployment Hardening
-
-If deploying to a public server:
-
-1. **Enable HTTPS** — Use a reverse proxy (nginx, Caddy) with TLS
-2. **Remove dangerous flags** — Delete `dangerouslyDisableDeviceAuth` and `allowInsecureAuth`
-3. **Use strong authentication** — Generate a secure token:
-   ```bash
-   openssl rand -hex 32
-   ```
-4. **Restrict binding** — Use `bind: "loopback"` behind a reverse proxy
-5. **Firewall rules** — Only allow necessary ports
-
-## Isolation
-
-This system runs completely isolated from other OpenClaw instances:
-
-| Resource | This System | Default OpenClaw |
-|----------|-------------|------------------|
-| Port | 18790 | 18789 |
-| Config directory | `./openclaw-game-home/` | `~/.openclaw/` |
-| Data directory | `./openclaw-game-home/` | `~/.openclaw/` |
-| UI path | `/game_control/` | `/` |
-| Process | Independent | Separate |
-
-Isolation is enforced via the `OPENCLAW_HOME` environment variable.
-
-## Troubleshooting
-
-### Port Already in Use
-
-**Error:** `EADDRINUSE: address already in use 0.0.0.0:18790`
-
-**Solution:**
-```bash
-# Find what's using the port
-lsof -i :18790
-
-# Kill the process
-kill -9 <PID>
-
-# Or use --force flag to auto-kill
-OPENCLAW_HOME=./openclaw-game-home node openclaw.mjs gateway run --port 18790 --bind lan --force
-```
-
-### Missing Workspace Templates
-
-**Error:** `Missing workspace template: AGENTS.md`
-
-**Solution:** Ensure these files exist:
-```
-docs/reference/templates/AGENTS.md
-docs/reference/templates/SOUL.md
-docs/reference/templates/TOOLS.md
-docs/reference/templates/IDENTITY.md
-docs/reference/templates/USER.md
-docs/reference/templates/HEARTBEAT.md
-docs/reference/templates/BOOTSTRAP.md
-```
-
-All template files are included in this repository.
-
-### Gateway Won't Start on LAN
-
-**Error:** `EXIT_CONFIG_ERROR` when using `bind: "lan"`
-
-**Solution:** LAN binding requires authentication. Make sure your config has:
-```json
-{
-  "auth": {
-    "mode": "token",
-    "token": "your-secret-token"
-  }
-}
-```
-
-### UI Not Loading
-
-**Check:**
-1. Gateway is running: Check terminal for `[gateway] ready`
-2. UI is built: Verify `dist/control-ui/index.html` exists
-3. Correct URL: `http://<ip>:18790/game_control/` (note the trailing slash)
-4. Token authentication: Add `?token=game-control-2026` to URL
-
-### Build Fails
-
-**Try:**
-```bash
-# Clean and reinstall
-rm -rf node_modules dist
-pnpm install
-pnpm build
-```
-
-## License
-
-MIT License — see [LICENSE](LICENSE) file.
-
-## Support
-
-- **Issues:** https://github.com/kandeng/openclaw_unity_game/issues
-- **Documentation:** See `proposal/WIKI.md` for system architecture details
